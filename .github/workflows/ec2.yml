@@ -3,55 +3,55 @@ name: Deploy Frontend to EC2
 on:
   push:
     branches:
-      - main          # runs when you push to main branch
+      - main
+    # Only run when the frontend changes
     paths:
-      - 'frontend/**' # only trigger if frontend files changed
+      - 'ComputexFrontend/**'
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout code
+      # Step 1: Checkout repository
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 2: Setup Node.js
+      # Step 2: Setup Node
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: 18
 
-      # Step 3: Build frontend
-      - name: Build frontend
+      # Step 3: Install dependencies and build Vite frontend
+      - name: Build Vite Frontend
         working-directory: ./ComputexFrontend
         run: |
           npm install
           npm run build
 
-      # Step 4: Connect to EC2 and install + configure Nginx
-      - name: Setup Nginx on EC2
+      # Step 4: Install and configure Nginx on EC2
+      - name: Install & Configure Nginx on EC2
         uses: appleboy/ssh-action@v1.2.0
         with:
-          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-          EC2_USER: ${{ secrets.EC2_USER }}
-          EC2_HOST: ${{ secrets.EC2_HOST }}
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # Update and install Nginx
             sudo apt update -y
             sudo apt install -y nginx
 
-            # Create web root if not existing
+            echo "📁 Creating web root directory..."
             sudo mkdir -p /var/www/html
-            sudo chown -R ubuntu:ubuntu /var/www/html
+            sudo chown -R $USER:$USER /var/www/html
 
-            # Create Nginx config
+            echo "📝 Writing new Nginx config..."
             sudo bash -c 'cat > /etc/nginx/sites-available/frontend.conf <<EOF
             server {
                 listen 80;
                 server_name _;
                 root /var/www/html;
-                index index.html index.htm;
+                index index.html;
 
                 location / {
                     try_files \$uri /index.html;
@@ -59,31 +59,28 @@ jobs:
             }
             EOF'
 
-            # Enable and start Nginx
             sudo ln -sf /etc/nginx/sites-available/frontend.conf /etc/nginx/sites-enabled/default
-            sudo systemctl enable nginx
+
+            echo "🔄 Restarting Nginx..."
             sudo systemctl restart nginx
 
-      # Step 5: Upload frontend build files to EC2
-      - name: Upload build folder to EC2
+      # Step 5: Upload Vite DIST folder to EC2
+      - name: Upload frontend build to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
-          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-          EC2_USER: ${{ secrets.EC2_USER }}
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          source: "frontend/build/*"
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "ComputexFrontend/dist/*"
           target: "/var/www/html"
 
-      # Step 6: Restart Nginx (optional)
-      - name: Restart Nginx after deploy
+      # Step 6: Restart Nginx to serve new version
+      - name: Final Restart Nginx
         uses: appleboy/ssh-action@v1.2.0
         with:
-          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-          EC2_USER: ${{ secrets.EC2_USER }}
-          EC2_HOST: ${{ secrets.EC2_HOST }}
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             sudo systemctl restart nginx
-            echo "✅ Deployment completed successfully!"
-
-
-            
+            echo "✅ Frontend Deployment Completed Successfully!"
