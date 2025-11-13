@@ -14,7 +14,7 @@ COPY . .
 # Build the production bundle
 RUN npm run build
 
-# Stage 2: Serve the build with Nginx
+# Stage 2: Serve the build with nginx
 FROM nginx:alpine
 
 # Copy Vite build output (from /app/dist) to Nginx web root
